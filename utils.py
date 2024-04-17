@@ -2,12 +2,14 @@ import argparse
 import os.path as op
 import json
 import random
-from math import e
+from math import e, ceil, log2
+from scipy.linalg import hadamard
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR
+from fastai.vision.all import URLs, untar_data
 
 username = op.expanduser('~').split('/')[-1]
 data_candidate = ('/scratch' if 'hrodriguez' == username else '/home') + f'/{username}/workspace'
@@ -15,6 +17,7 @@ DATA = op.realpath(op.expanduser(data_candidate))
 RESULT = op.join(DATA, 'results', 'hebb', 'result')  # everything from multi_layer.py
 SEARCH = op.join(DATA, 'results', 'hebb', 'search')  # everything from ray_search
 DATASET = op.join(DATA, 'data')
+# DATASET = untar_data(URLs.IMAGENETTE_160)
 
 
 def get_folder_name(params):
@@ -224,33 +227,92 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+# def init_weight(shape, weight_distribution, weight_range, weight_offset=0):
+#     """
+#     Weight initialization from a distribution
+#     Parameters
+#     ----------
+#     shape: tuple
+#         Expected shape of the Weight tensor
+#     weight_distribution: str
+#         Distribution
+#     weight_range:
+#         multiplier of the weight
+#     weight_offset:
+#         Value add to the weight
+
+#     Returns
+#     -------
+#         weight: Tensor
+#     """
+#     if weight_distribution == 'positive':
+#         return weight_range * torch.rand(shape) + weight_offset
+#     elif weight_distribution == 'negative':
+#         return -weight_range * torch.rand(shape) + weight_offset
+#     elif weight_distribution == 'zero_mean':
+#         return 2 * torch.rand(shape) + weight_offset
+#     elif weight_distribution == 'normal':
+#         return weight_range * torch.randn(shape) + weight_offset
+
 
 def init_weight(shape, weight_distribution, weight_range, weight_offset=0):
-    """
-    Weight initialization from a distribution
-    Parameters
-    ----------
-    shape: tuple
-        Expected shape of the Weight tensor
-    weight_distribution: str
-        Distribution
-    weight_range:
-        multiplier of the weight
-    weight_offset:
-        Value add to the weight
+    if len(shape) == 2:
+        res = algorithm_1(shape)
+    elif len(shape) == 4:
+        cout = shape[0]
+        cin = shape[1]
+        k = shape[2]
 
-    Returns
-    -------
-        weight: Tensor
-    """
-    if weight_distribution == 'positive':
-        return weight_range * torch.rand(shape) + weight_offset
-    elif weight_distribution == 'negative':
-        return -weight_range * torch.rand(shape) + weight_offset
-    elif weight_distribution == 'zero_mean':
-        return 2 * torch.rand(shape) + weight_offset
-    elif weight_distribution == 'normal':
-        return weight_range * torch.randn(shape) + weight_offset
+        res = algorithm_2(cout, cin, k)
+
+    return res
+    
+def algorithm_1(shape):
+    # Algorithm 1
+    m = shape[0]
+    n = shape[1]
+    
+    if m <= n:
+        init_matrix = torch.nn.init.eye_(torch.empty(m, n))
+    elif m > n:
+        clog_m = ceil(log2(m))
+        p = 2**(clog_m)
+        init_matrix = torch.nn.init.eye_(torch.empty(m, p)) @ (torch.tensor(hadamard(p)).float()/(2**(clog_m/2))) @ torch.nn.init.eye_(torch.empty(p, n))
+    
+    return init_matrix
+
+def algorithm_2(cout, cin, k):
+    # Algorithm 2
+    K = torch.zeros(cout, cin, k, k)
+    n = k // 2
+    
+    if cout == cin:
+        K[:, :, n, n] = torch.eye(cout)
+    elif cout < cin:
+        K[:, :, n, n] = partial_identity(cout, cin)
+    else:
+        max_dim = max(cout, cin)
+        m = ceil(log2(max_dim))
+        H = torch.tensor(hadamard(2**m)) / 2**(m/2)
+        I_cout = partial_identity(cout, 2**m)
+        I_cin = partial_identity(2**m, cin)
+        c = 2 ** (-(m-1)/2)
+        
+        K[:, :, n, n] = c * (I_cout @ H @ I_cin)
+
+    return K
+
+def partial_identity(rows, cols):
+    # Definition 1
+    min_dim = min(rows, cols)
+    I = torch.eye(min_dim)
+    if rows < cols:
+        zeros = torch.zeros(min_dim, cols - min_dim)
+        return torch.cat((I, zeros), dim=1)
+    elif rows > cols:
+        zeros = torch.zeros(rows - min_dim, min_dim)
+        return torch.cat((I, zeros), dim=0)
+    return I
 
 
 def double_factorial(x):

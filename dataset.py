@@ -27,7 +27,7 @@ class AddGaussianNoise(object):
 
 def imagenet_tf(width, height):
     return transforms.Compose([
-        transforms.RandomSizedCrop((width, height)),
+        transforms.RandomResizedCrop((width, height)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -135,12 +135,14 @@ def select_dataset(dataset_config, device, dataset_path):
         dataset_class = ImageNette
         indices = list(range(9469))
 
-        if dataset_config['px'] == 'default':
-            dataset_path = '/home/username/.fastai/data/imagenette2'
-        elif dataset_config['px'] == 320:
-            dataset_path = '/home/username/.fastai/data/imagenette2-320'
-        else:
-            dataset_path = os.path.join(DATASET, 'imagenette2-160')  # '/home/username/.fastai/data/imagenette2-160'
+        dataset_path = '/home/ubuntu/SoftHebb-Minh/data/imagenette2-160'
+
+        # if dataset_config['px'] == 'default':
+        #     dataset_path = '/home/username/.fastai/data/imagenette2'
+        # elif dataset_config['px'] == 320:
+        #     dataset_path = '/home/username/.fastai/data/imagenette2-320'
+        # else:
+        #     dataset_path = os.path.join(DATASET, 'imagenette2-160')  # '/home/username/.fastai/data/imagenette2-160'
 
         if dataset_config['augmentation']:
             dataset_train_class = ImageNette
